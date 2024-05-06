@@ -45,7 +45,10 @@
         dest: /var/www/html/site-exemplo/index.php
     
     - name: Definindo permissões do site
-      command: sudo chown -R nginx:nginx /var/www/html/site-exemplo    
+      command: sudo chown -R nginx:nginx /var/www/html/site-exemplo 
+    
+    - name: Reiniciando o nginx
+      command: sudo systemctl restart nginx   
   
   handlers:
     - name: Reload Nginx
