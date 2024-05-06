@@ -1,0 +1,115 @@
+---
+- name: Instalando WordPress e MariaDB
+  hosts: all
+  remote_user: ec2-user
+  become: yes
+  vars_files:
+    - vars/vars.yaml
+  tasks:
+    - name: Instalando MariaDB
+      dnf:
+        name: mariadb105-server
+        state: present
+
+    - name: Iniciando MariaDB
+      systemd:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: Instalando modulo PHP MySQL 
+      dnf:
+        name: php-mysqlnd
+        state: present
+
+    - name: Instalando pip para modulos necessários
+      become: true
+      package:
+        name: python3-pip
+        state: present
+
+    - name: Instalando pacote pexpect
+      pip:
+        name: pexpect
+        state: present    
+ 
+
+    - name: Criando arquivo de configuração do Nginx
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/conf.d/blog-gilberto-lira.dreamsquad.com.br.conf
+      
+       
+    - name: Chegando se o diretório já existe
+      stat:
+        path: "{{ dir_wordpress }}"
+      register: wordpress_dir
+    
+    - name: Criando diretório do WordPress
+      file:
+        path: "{{ dir_wordpress }}"
+        state: directory
+      when: not wordpress_dir.stat.exists
+
+    - name: Definindo permissões para o diretório
+      command: sudo chown -R nginx:nginx "{{ dir_wordpress }}"   
+
+    - name: Baixando WordPress
+      get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/latest.tar.gz
+
+    - name: Descompactando WordPress
+      unarchive:
+        src: /tmp/latest.tar.gz
+        dest: /var/www/
+        remote_src: yes
+
+    - name: Copiando arquivo de configuração do WordPress
+      copy:
+        src: "{{ dir_wordpress }}/wp-config-sample.php"
+        dest: "{{ dir_wordpress }}/wp-config.php"
+        remote_src: yes
+
+    - name: Substituindo as variaveis do arquivo de configuração do WordPress
+      replace:
+        path: "{{ dir_wordpress }}/wp-config.php"
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      loop:
+        - regexp: "'DB_NAME', '.*'"
+          replace: "'DB_NAME', 'wordpress'"
+        - regexp: "'DB_USER', '.*'"
+          replace: "'DB_USER', 'wp_user'"
+        - regexp: "'DB_PASSWORD', '.*'"
+          replace: "'DB_PASSWORD', '{{ bd_senha }}'"
+
+    
+    
+    
+    - name: Iniciando configuração do MySQL
+      expect:
+        command: sudo mysql_secure_installation
+        responses:
+          "Enter current password for root (enter for none):": "{{ bd_senha }}"
+          "Switch to unix_socket authentication [Y/n]": "y"
+          "Change the root password?[Y/n]": "n"
+          "Remove anonymous users? [Y/n]": "y"
+          "Disallow root login remotely? [Y/n]": "y"
+          "Remove test database and access to it? [Y/n]": "y"
+          "Reload privilege tables now? [Y/n]": "y"
+        timeout: 1
+      register: secure_mariadb
+      failed_when: "'... Failed!' in secure_mariadb.stdout_lines"
+
+    - name: Criando database para o WordPress
+      command: >
+        sudo mysql -u root -e "CREATE DATABASE IF NOT EXISTS wordpress;
+                            CREATE USER IF NOT EXISTS 'wp_user'@'localhost' IDENTIFIED BY '{{ bd_senha }}';
+                            GRANT ALL PRIVILEGES ON wordpress.* TO 'wp_user'@'localhost';
+                            FLUSH PRIVILEGES;"
+
+    - name: Reiniciar Nginx
+      systemd:
+        name: nginx
+        state: restarted

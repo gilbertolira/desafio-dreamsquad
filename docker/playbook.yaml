@@ -1,0 +1,23 @@
+---
+- name: Subindo Nginx com o docker
+  hosts: all
+  remote_user: ec2-user
+  become: yes
+  tasks:
+    - name: Instalando Docker
+      dnf:
+        name: docker
+        state: present
+      become: true
+
+    - name: Iniciando Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+      become: true
+
+    - name: Subindo o contêiner Nginx
+      command: >
+        docker container run -d -p 8080:80 --restart=on-failure:5 nginx
+      become: true

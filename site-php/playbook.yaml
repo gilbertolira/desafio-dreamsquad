@@ -1,0 +1,55 @@
+---
+- name: Configurando Nginx e PHP
+  hosts: all
+  remote_user: ec2-user
+  become: yes
+
+  tasks:
+    - name: Atualizando pacotes
+      dnf:
+        name: '*'
+        state: latest
+
+    - name: Instalando Nginx
+      dnf:
+        name: nginx
+        state: present
+
+    - name: Iniciando e habilitando Nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Instalando PHP 8.2 e PHP-FPM
+      dnf:
+        name: 
+          - php8.2
+          - php8.2-fpm 
+        state: present
+
+    - name: Criando arquivo de configuração Nginx
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/conf.d/php-gilberto-lira.dreamsquad.com.br.conf
+      notify: Reload Nginx
+
+    - name: Criando diretório do site
+      file:
+        path: /var/www/html/site-exemplo
+        state: directory
+
+    - name: Copiando arquivo index.php
+      copy:
+        src: ./index.php
+        dest: /var/www/html/site-exemplo/index.php
+    
+    - name: Definindo permissões do site
+      command: sudo chown -R nginx:nginx /var/www/html/site-exemplo    
+  
+  handlers:
+    - name: Reload Nginx
+      systemd:
+        name: nginx
+        state: reloaded
+       

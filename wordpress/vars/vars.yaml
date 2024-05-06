@@ -1,0 +1,4 @@
+
+dir_wordpress: /var/www/wordpress
+
+bd_senha: #aqui colocar a senha do bando de dados
