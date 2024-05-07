@@ -3,55 +3,45 @@
   hosts: all
   remote_user: ec2-user
   become: yes
-
   tasks:
-    - name: Atualizando pacotes
+    - name: Instalando Nginx e PHP 8.2 com PHP-FPM
       dnf:
-        name: '*'
-        state: latest
-
-    - name: Instalando Nginx
-      dnf:
-        name: nginx
+        name: "{{ item }}"
         state: present
+      loop:
+        - nginx
+        - php8.2
+        - php8.2-fpm
 
-    - name: Iniciando e habilitando Nginx
+    - name: Iniciando e habilitando serviços
       systemd:
-        name: nginx
+        name: "{{ item }}"
         state: started
         enabled: yes
+      loop:
+        - nginx
+        - php-fpm
 
-    - name: Instalando PHP 8.2 e PHP-FPM
-      dnf:
-        name: 
-          - php8.2
-          - php8.2-fpm 
-        state: present
 
-    - name: Criando arquivo de configuração Nginx
+    - name: Criando arquivo configuração do Nginx
       template:
         src: nginx.conf.j2
         dest: /etc/nginx/conf.d/php-gilberto-lira.dreamsquad.com.br.conf
-      notify: Reload Nginx
-
+      
     - name: Criando diretório do site
       file:
         path: /var/www/html/site-exemplo
         state: directory
 
-    - name: Copiando arquivo index.php
+    - name: Copiando index.php para diretório
       copy:
         src: ./index.php
         dest: /var/www/html/site-exemplo/index.php
     
-    - name: Definindo permissões do site
-      command: sudo chown -R nginx:nginx /var/www/html/site-exemplo 
-    
-    - name: Reiniciando o nginx
-      command: sudo systemctl restart nginx   
-  
-  handlers:
-    - name: Reload Nginx
+    - name: Definindo permissões para o diretório do site
+      command: sudo chown -R nginx:nginx /var/www/html/site-exemplo    
+
+    - name: Reiniciando Nginx
       systemd:
         name: nginx
         state: reloaded
