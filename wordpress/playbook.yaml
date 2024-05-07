@@ -1,37 +1,38 @@
 ---
-- name: Instalando WordPress e MariaDB
+- name: Instalando WordPress
   hosts: all
   remote_user: ec2-user
   become: yes
   vars_files:
     - vars/vars.yaml
   tasks:
-    - name: Instalando MariaDB
+    - name: Instalando pacotes necessários para WordPress
       dnf:
-        name: mariadb105-server
+        name: "{{ item }}"
         state: present
+      loop:
+        - nginx
+        - php8.2
+        - php8.2-fpm
+        - mariadb105-server
+        - php-mysqlnd
+        - python3-pip
 
-    - name: Iniciando MariaDB
+    - name: Iniciando e habilitando serviços
       systemd:
-        name: mariadb
+        name: "{{ item }}"
         state: started
         enabled: yes
+      loop:
+        - nginx
+        - php-fpm
+        - mariadb
 
-    - name: Instalando modulo PHP MySQL 
-      dnf:
-        name: php-mysqlnd
-        state: present
-
-    - name: Instalando pip para modulos necessários
-      become: true
-      package:
-        name: python3-pip
-        state: present
-
-    - name: Instalando pacote pexpect
+    - name: Instalando pexpect
       pip:
         name: pexpect
-        state: present    
+        state: present
+ 
  
 
     - name: Criando arquivo de configuração do Nginx
@@ -40,7 +41,7 @@
         dest: /etc/nginx/conf.d/blog-gilberto-lira.dreamsquad.com.br.conf
       
        
-    - name: Chegando se o diretório já existe
+    - name: Checando se o diretório já existe
       stat:
         path: "{{ dir_wordpress }}"
       register: wordpress_dir
@@ -50,9 +51,7 @@
         path: "{{ dir_wordpress }}"
         state: directory
       when: not wordpress_dir.stat.exists
-
-    - name: Definindo permissões para o diretório
-      command: sudo chown -R nginx:nginx "{{ dir_wordpress }}"   
+      
 
     - name: Baixando WordPress
       get_url:
@@ -64,12 +63,14 @@
         src: /tmp/latest.tar.gz
         dest: /var/www/
         remote_src: yes
+      when: not wordpress_dir.stat.exists    
 
     - name: Copiando arquivo de configuração do WordPress
       copy:
         src: "{{ dir_wordpress }}/wp-config-sample.php"
         dest: "{{ dir_wordpress }}/wp-config.php"
         remote_src: yes
+      when: not wordpress_dir.stat.exists or wordpress_dir.stat.islnk    
 
     - name: Substituindo as variaveis do arquivo de configuração do WordPress
       replace:
@@ -100,6 +101,7 @@
           "Reload privilege tables now? [Y/n]": "y"
         timeout: 1
       register: secure_mariadb
+      changed_when: secure_mariadb.stdout.find('... Already locked.') == -1
       failed_when: "'... Failed!' in secure_mariadb.stdout_lines"
 
     - name: Criando database para o WordPress
@@ -109,7 +111,10 @@
                             GRANT ALL PRIVILEGES ON wordpress.* TO 'wp_user'@'localhost';
                             FLUSH PRIVILEGES;"
 
-    - name: Reiniciar Nginx
+    - name: Definindo permissões para o diretório do site
+      command: sudo chown -R nginx:nginx /var/www/wordpress
+
+    - name: Reiniciando Nginx
       systemd:
         name: nginx
         state: restarted
